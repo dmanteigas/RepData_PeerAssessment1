@@ -1,0 +1,115 @@
+---
+title: "RepData_PeerAssessment1"
+author: "David Manteigas"
+date: "Tuesday, April 14, 2015"
+output: html_document
+---
+#Introduction
+
+This assignment was performed using the [Activity Monitoring Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip). This dataset contains  data from a personal activity monitoring device.
+The variables present in this dataset represent:
+-**steps**: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+-**date**: The date on which the measurement was taken in YYYY-MM-DD format
+-**interval**: Identifier for the 5-minute interval in which measurement was taken
+
+All the calculations were performed using R x64 3.1.1 and/or confirmed by RStudio
+
+##Loading and preprocessing the data
+
+For this part of the assignment, the data was loaded into R and only the variable data was transformed into "Date" format.
+
+```{r}
+Activity_data <- read.csv("C:/Users/David Manteigas/Documents/activity.csv",stringsAsFactors=FALSE)
+Activity_data$date <- as.Date(Activity_data$date)
+str(Activity_data)
+```
+##What is mean total number of steps taken per day?
+
+For this part of the assignment, the package dplyr will be used.
+The following code transforms Activity_data into a tbl and then calculates the total number of steps by day.
+```{r}
+library(dplyr)
+Activity_data_tbl <- tbl_df(Activity_data[,1:2])
+Sum_steps_day <- Activity_data_tbl %>% group_by(date) %>% summarise_each(funs(sum(.,na.rm=TRUE)))
+print(Sum_steps_day)
+```
+
+Here an histogram of the total steps by day is produced.
+```{r}
+with(Sum_steps_day,{
+        hist(steps,col="blue",xlab="Total number of steps by day",ylab="Frequency")
+	}
+)
+```
+
+Mean and Median steps taken by day, using dplyr
+
+```{r}
+Mean_steps_day <- Activity_data_tbl %>% group_by(date) %>% summarise_each(funs(mean(.,na.rm=TRUE)))
+Median_steps_day <- Activity_data_tbl %>% group_by(date) %>% summarise_each(funs(median(.,na.rm=TRUE)))
+print(Mean_steps_day)
+print(Median_steps_day)
+```
+
+##What is the average daily activity pattern?
+Time series plot (type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis). First, using dplyr and subsetting by day and interval and than using aggregate and filtering only by interval.
+```{r}
+Activity_data_tbl <- tbl_df(Activity_data)
+Mean_steps_day_by_interval <- Activity_data_tbl %>% group_by(interval,date) %>% summarise_each(funs(mean(.,na.rm=TRUE)))
+plot(steps~interval,data=Mean_steps_day_by_interval,type="l",ylab="Mean steps by day",xlab="Day interval")
+stepsInterval <- aggregate(steps ~ interval, data = Activity_data, mean, na.rm = TRUE)
+plot(steps ~ interval, data = stepsInterval, type = "l")
+```
+
+Calculation of the maximum number of steps taken by day and interval
+```{r}
+max_num_steps <- max(Mean_steps_day_by_interval$steps,na.rm=TRUE)
+print(max_num_steps)
+```
+
+##Imputing missing values
+
+Calculating the total number of NA's in the dataset
+```{r}
+total_na <- sum(is.na(Activity_data$steps))
+```
+
+Fill all the NA's in the dataset
+```{r}
+interval2steps <- function(interval) {
+    stepsInterval[stepsInterval$interval == interval, ]$steps
+} #made a function "interval2steps" to get the mean steps for particular 5-minute interval
+activityFilled <- Activity_data  # Make a new dataset with the original data
+count = 0  # Count the number of data filled in
+for (i in 1:nrow(activityFilled)) {
+    if (is.na(activityFilled[i, ]$steps)) {
+        activityFilled[i, ]$steps <- interval2steps(activityFilled[i, ]$interval)
+        count = count + 1
+    }
+}
+cat("Total ", count, "NA values were filled.\n\r")
+```
+
+Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day.
+```{r}
+totalSteps2 <- aggregate(steps ~ date, data = activityFilled, sum)
+hist(totalSteps2$steps)
+mean(totalSteps2$steps)
+median(totalSteps2$steps)
+```
+
+Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+```{r}
+activityFilled$day = ifelse(as.POSIXlt(as.Date(activityFilled$date))$wday%%6 == 
+    0, "weekend", "weekday")
+# For Sunday and Saturday : weekend, Other days : weekday
+activityFilled$day = factor(activityFilled$day, levels = c("weekday", "weekend"))
+```
+
+Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). The plot should look something like the following, which was creating using simulated data:
+```{r}
+stepsInterval2 = aggregate(steps ~ interval + day, activityFilled, mean)
+library(lattice)
+xyplot(steps ~ interval | factor(day), data = stepsInterval2, aspect = 1/2, 
+    type = "l")
+```
